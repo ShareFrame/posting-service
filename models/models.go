@@ -13,3 +13,15 @@ type RequestPayload struct {
 	DID       string             `json:"did"`
 	Post      ShareFrameFeedPost `json:"post"`
 }
+
+type PostResponse struct {
+	URI              string `json:"uri"`
+	CID              string `json:"cid"`
+	Commit          Commit `json:"commit"`
+	ValidationStatus string `json:"validationStatus"`
+}
+
+type Commit struct {
+	CID string `json:"cid"`
+	Rev string `json:"rev"`
+}
