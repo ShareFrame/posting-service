@@ -12,7 +12,22 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func PostToFeed(post models.ShareFrameFeedPost, authToken, did string) (*models.PostResponse, error) {
+type ATProtoClient interface {
+	PostToFeed(post models.ShareFrameFeedPost, authToken, did string) (*models.PostResponse, error)
+}
+
+type ATProtoService struct {
+	client *http.Client
+}
+
+func NewATProtoService(client *http.Client) *ATProtoService {
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second} 
+	}
+	return &ATProtoService{client: client}
+}
+
+func (s *ATProtoService) PostToFeed(post models.ShareFrameFeedPost, authToken, did string) (*models.PostResponse, error) {
 	const postURL = "https://shareframe.social/xrpc/com.atproto.repo.createRecord"
 
 	payload, err := json.Marshal(map[string]interface{}{
@@ -34,8 +49,7 @@ func PostToFeed(post models.ShareFrameFeedPost, authToken, did string) (*models.
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+authToken)
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := s.client.Do(req)
 	if err != nil {
 		logrus.WithError(err).Error("HTTP request failed")
 		return nil, fmt.Errorf("failed to send request: %w", err)

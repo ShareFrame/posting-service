@@ -13,7 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func PostHandler(ctx context.Context, request models.RequestPayload) (*models.PostResponse, error) {
+func PostHandler(ctx context.Context, client atproto.ATProtoClient, request models.RequestPayload) (*models.PostResponse, error) {
 	if request.AuthToken == "" || request.DID == "" {
 		err := errors.New("invalid request: missing 'authToken' or 'did'")
 		logrus.Error(err)
@@ -25,7 +25,7 @@ func PostHandler(ctx context.Context, request models.RequestPayload) (*models.Po
 		return nil, fmt.Errorf("invalid post: %w", err)
 	}
 
-	postResponse, err := atproto.PostToFeed(request.Post, request.AuthToken, request.DID)
+	postResponse, err := client.PostToFeed(request.Post, request.AuthToken, request.DID)
 	if err != nil {
 		logrus.WithError(err).WithField("DID", request.DID).Error("Failed to post to feed")
 		return nil, fmt.Errorf("posting to feed failed: %w", err)
