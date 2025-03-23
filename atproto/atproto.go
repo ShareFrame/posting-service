@@ -22,7 +22,7 @@ type ATProtoService struct {
 
 func NewATProtoService(client *http.Client) *ATProtoService {
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second} 
+		client = &http.Client{Timeout: 10 * time.Second}
 	}
 	return &ATProtoService{client: client}
 }
@@ -30,11 +30,12 @@ func NewATProtoService(client *http.Client) *ATProtoService {
 func (s *ATProtoService) PostToFeed(post models.ShareFrameFeedPost, authToken, did string) (*models.PostResponse, error) {
 	const postURL = "https://shareframe.social/xrpc/com.atproto.repo.createRecord"
 
-	payload, err := json.Marshal(map[string]interface{}{
-		"repo":       did,
-		"collection": "social.shareframe.feed.post",
-		"record":     post,
+	payload, err := json.Marshal(models.CreateRecordRequest{
+		Repo:       did,
+		Collection: "social.shareframe.feed.post",
+		Record:     post,
 	})
+
 	if err != nil {
 		logrus.WithError(err).Error("Failed to marshal JSON payload")
 		return nil, fmt.Errorf("failed to marshal request payload: %w", err)
