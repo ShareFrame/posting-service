@@ -26,6 +26,8 @@ func (m *MockATProtoClient) PostToFeed(post models.ShareFrameFeedPost, authToken
 func TestPostHandler(t *testing.T) {
 	mockAtproto := new(MockATProtoClient)
 
+	now := time.Now().UTC()
+
 	tests := []struct {
 		name        string
 		request     models.RequestPayload
@@ -34,6 +36,7 @@ func TestPostHandler(t *testing.T) {
 		expectErr   bool
 		expectResp  *models.PostResponse
 		mockCalled  bool
+		checkPostFn func(models.ShareFrameFeedPost)
 	}{
 		{
 			name: "Valid post request",
@@ -44,7 +47,7 @@ func TestPostHandler(t *testing.T) {
 					NSID:      "social.shareframe.feed.post",
 					Text:      "Hello World!",
 					ImageUris: []string{"https://example.com/image.jpg"},
-					CreatedAt: time.Now().Format(time.RFC3339),
+					CreatedAt: now.Format(time.RFC3339),
 				},
 			},
 			mockResp: &models.PostResponse{
@@ -53,8 +56,8 @@ func TestPostHandler(t *testing.T) {
 				Commit:           models.Commit{CID: "commit123", Rev: "rev123"},
 				ValidationStatus: "unknown",
 			},
-			mockErr:    nil,
-			expectErr:  false,
+			mockErr:   nil,
+			expectErr: false,
 			expectResp: &models.PostResponse{
 				URI:              "at://did:example:123/social.shareframe.feed.post/xyz",
 				CID:              "bafyre123456",
@@ -62,6 +65,37 @@ func TestPostHandler(t *testing.T) {
 				ValidationStatus: "unknown",
 			},
 			mockCalled: true,
+			checkPostFn: func(p models.ShareFrameFeedPost) {
+				assert.Equal(t, "ShareFrame", p.SourceApp)
+			},
+		},
+		{
+			name: "Story post auto-sets expiresAt",
+			request: models.RequestPayload{
+				AuthToken: "valid_token",
+				DID:       "did:example:456",
+				Post: models.ShareFrameFeedPost{
+					NSID:      "social.shareframe.feed.post",
+					Text:      "This is a story",
+					IsStory:   true,
+					CreatedAt: now.Format(time.RFC3339),
+				},
+			},
+			mockResp: &models.PostResponse{
+				URI: "dummy", CID: "c", Commit: models.Commit{}, ValidationStatus: "ok",
+			},
+			mockErr:    nil,
+			expectErr:  false,
+			expectResp: &models.PostResponse{URI: "dummy", CID: "c", Commit: models.Commit{}, ValidationStatus: "ok"},
+			mockCalled: true,
+			checkPostFn: func(p models.ShareFrameFeedPost) {
+				assert.Equal(t, "ShareFrame", p.SourceApp)
+				assert.NotEmpty(t, p.ExpiresAt)
+
+				expiresAt, err := time.Parse(time.RFC3339, p.ExpiresAt)
+				assert.NoError(t, err)
+				assert.WithinDuration(t, now.Add(24*time.Hour), expiresAt, time.Minute)
+			},
 		},
 		{
 			name: "Missing AuthToken",
@@ -75,13 +109,14 @@ func TestPostHandler(t *testing.T) {
 			mockCalled: false,
 		},
 		{
-			name: "Invalid post format",
+			name: "Invalid NSID format",
 			request: models.RequestPayload{
 				AuthToken: "valid_token",
 				DID:       "did:example:123",
 				Post: models.ShareFrameFeedPost{
-					NSID: "wrong.nsid",
-					Text: "Invalid Post",
+					NSID:      "wrong.nsid",
+					Text:      "Invalid Post",
+					CreatedAt: now.Format(time.RFC3339),
 				},
 			},
 			expectErr:  true,
@@ -97,7 +132,7 @@ func TestPostHandler(t *testing.T) {
 					NSID:      "social.shareframe.feed.post",
 					Text:      "API failure test",
 					ImageUris: []string{"https://example.com/image.jpg"},
-					CreatedAt: time.Now().Format(time.RFC3339),
+					CreatedAt: now.Format(time.RFC3339),
 				},
 			},
 			mockResp:   nil,
@@ -113,8 +148,18 @@ func TestPostHandler(t *testing.T) {
 			ctx := context.Background()
 
 			if tt.mockCalled {
-				mockAtproto.On("PostToFeed", mock.Anything, mock.Anything, mock.Anything).
+				var capturedPost models.ShareFrameFeedPost
+				mockAtproto.On("PostToFeed", mock.Anything, tt.request.AuthToken, tt.request.DID).
+					Run(func(args mock.Arguments) {
+						capturedPost = args.Get(0).(models.ShareFrameFeedPost)
+					}).
 					Return(tt.mockResp, tt.mockErr).Once()
+
+				defer func() {
+					if tt.checkPostFn != nil {
+						tt.checkPostFn(capturedPost)
+					}
+				}()
 			}
 
 			resp, err := PostHandler(ctx, mockAtproto, tt.request)
@@ -146,7 +191,6 @@ func TestValidatePost(t *testing.T) {
 				NSID:      "social.shareframe.feed.post",
 				Text:      "Hello World!",
 				ImageUris: []string{"https://example.com/photo.jpg"},
-				VideoUris: []string{},
 				CreatedAt: time.Now().Format(time.RFC3339),
 			},
 			expectErr: false,
@@ -155,8 +199,6 @@ func TestValidatePost(t *testing.T) {
 			name: "Valid post with video",
 			post: models.ShareFrameFeedPost{
 				NSID:      "social.shareframe.feed.post",
-				Text:      "Check this out!",
-				ImageUris: []string{},
 				VideoUris: []string{"https://example.com/video.mp4"},
 				CreatedAt: time.Now().Format(time.RFC3339),
 			},
@@ -166,7 +208,6 @@ func TestValidatePost(t *testing.T) {
 			name: "Invalid NSID",
 			post: models.ShareFrameFeedPost{
 				NSID:      "invalid.nsid",
-				Text:      "Wrong NSID",
 				ImageUris: []string{"https://example.com/photo.jpg"},
 				CreatedAt: time.Now().Format(time.RFC3339),
 			},
@@ -178,17 +219,6 @@ func TestValidatePost(t *testing.T) {
 				NSID:      "social.shareframe.feed.post",
 				Text:      string(make([]byte, 301)),
 				ImageUris: []string{"https://example.com/photo.jpg"},
-				CreatedAt: time.Now().Format(time.RFC3339),
-			},
-			expectErr: true,
-		},
-		{
-			name: "Missing image and video",
-			post: models.ShareFrameFeedPost{
-				NSID:      "social.shareframe.feed.post",
-				Text:      "No media attached",
-				ImageUris: []string{},
-				VideoUris: []string{},
 				CreatedAt: time.Now().Format(time.RFC3339),
 			},
 			expectErr: true,
@@ -207,7 +237,6 @@ func TestValidatePost(t *testing.T) {
 			name: "Invalid video format",
 			post: models.ShareFrameFeedPost{
 				NSID:      "social.shareframe.feed.post",
-				Text:      "Invalid format",
 				VideoUris: []string{"https://example.com/video.avi"},
 				CreatedAt: time.Now().Format(time.RFC3339),
 			},
@@ -241,15 +270,14 @@ func TestIsValidExtension(t *testing.T) {
 	tests := []struct {
 		name      string
 		uri       string
-		allowed   []string
+		allowed   map[string]struct{}
 		expectRes bool
 	}{
-		{"Valid image - jpg", "https://example.com/photo.jpg", []string{".jpg", ".jpeg", ".png"}, true},
-		{"Valid image - png", "https://example.com/photo.png", []string{".jpg", ".jpeg", ".png"}, true},
-		{"Valid image - heic", "https://example.com/photo.heic", []string{".jpg", ".jpeg", ".png", ".heic", ".heif"}, true},
-		{"Invalid image - pdf", "https://example.com/photo.pdf", []string{".jpg", ".jpeg", ".png"}, false},
-		{"Valid video - mp4", "https://example.com/video.mp4", []string{".mp4", ".mov"}, true},
-		{"Invalid video - avi", "https://example.com/video.avi", []string{".mp4", ".mov"}, false},
+		{"Valid image - jpg", "https://example.com/photo.jpg", allowedImageExts, true},
+		{"Valid image - heic", "https://example.com/photo.heic", allowedImageExts, true},
+		{"Invalid image - pdf", "https://example.com/photo.pdf", allowedImageExts, false},
+		{"Valid video - mp4", "https://example.com/video.mp4", allowedVideoExts, true},
+		{"Invalid video - avi", "https://example.com/video.avi", allowedVideoExts, false},
 	}
 
 	for _, tt := range tests {

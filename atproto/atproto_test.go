@@ -2,8 +2,9 @@ package atproto
 
 import (
 	"errors"
+	"io"
 	"net/http"
-	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,6 +21,8 @@ func (m *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func TestPostToFeed(t *testing.T) {
+	now := time.Now().Format(time.RFC3339)
+
 	tests := []struct {
 		name           string
 		post           models.ShareFrameFeedPost
@@ -37,7 +40,7 @@ func TestPostToFeed(t *testing.T) {
 				NSID:      "social.shareframe.feed.post",
 				Text:      "Valid Post",
 				ImageUris: []string{"https://example.com/image.jpg"},
-				CreatedAt: time.Now().Format(time.RFC3339),
+				CreatedAt: now,
 			},
 			authToken: "valid_token",
 			did:       "did:example:123",
@@ -48,7 +51,6 @@ func TestPostToFeed(t *testing.T) {
 				"validationStatus": "unknown"
 			}`,
 			mockStatusCode: http.StatusOK,
-			mockErr:        nil,
 			expectErr:      false,
 			expectedResp: &models.PostResponse{
 				URI:              "at://did:example:123/social.shareframe.feed.post/xyz",
@@ -65,7 +67,6 @@ func TestPostToFeed(t *testing.T) {
 			},
 			authToken: "valid_token",
 			did:       "did:example:123",
-			mockErr:   nil,
 			expectErr: true,
 		},
 		{
@@ -74,7 +75,7 @@ func TestPostToFeed(t *testing.T) {
 				NSID:      "social.shareframe.feed.post",
 				Text:      "Hello World!",
 				ImageUris: []string{"https://example.com/image.jpg"},
-				CreatedAt: time.Now().Format(time.RFC3339),
+				CreatedAt: now,
 			},
 			authToken: "valid_token",
 			did:       "did:example:123",
@@ -87,7 +88,7 @@ func TestPostToFeed(t *testing.T) {
 				NSID:      "social.shareframe.feed.post",
 				Text:      "Hello World!",
 				ImageUris: []string{"https://example.com/image.jpg"},
-				CreatedAt: time.Now().Format(time.RFC3339),
+				CreatedAt: now,
 			},
 			authToken:      "valid_token",
 			did:            "did:example:123",
@@ -101,7 +102,7 @@ func TestPostToFeed(t *testing.T) {
 				NSID:      "social.shareframe.feed.post",
 				Text:      "Hello World!",
 				ImageUris: []string{"https://example.com/image.jpg"},
-				CreatedAt: time.Now().Format(time.RFC3339),
+				CreatedAt: now,
 			},
 			authToken:      "valid_token",
 			did:            "did:example:123",
@@ -113,31 +114,25 @@ func TestPostToFeed(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Mock HTTP transport
 			mockTransport := &mockTransport{
 				roundTripFunc: func(req *http.Request) (*http.Response, error) {
 					if tt.mockErr != nil {
 						return nil, tt.mockErr
 					}
-	
-					resp := httptest.NewRecorder()
-					if tt.mockStatusCode == 0 {
-						resp.WriteHeader(http.StatusInternalServerError)
-					} else {
-						resp.WriteHeader(tt.mockStatusCode)
+					res := &http.Response{
+						StatusCode: tt.mockStatusCode,
+						Header:     make(http.Header),
+						Body:       io.NopCloser(strings.NewReader(tt.mockResponse)),
 					}
-	
-					resp.WriteString(tt.mockResponse)
-					return resp.Result(), nil
+					return res, nil
 				},
 			}
-	
+
 			mockClient := &http.Client{Transport: mockTransport}
-	
 			service := NewATProtoService(mockClient)
-	
+
 			resp, err := service.PostToFeed(tt.post, tt.authToken, tt.did)
-	
+
 			if tt.expectErr {
 				assert.Error(t, err)
 				assert.Nil(t, resp)
@@ -147,5 +142,4 @@ func TestPostToFeed(t *testing.T) {
 			}
 		})
 	}
-	
 }
