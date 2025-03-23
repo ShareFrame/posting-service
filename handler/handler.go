@@ -46,6 +46,11 @@ func PostHandler(ctx context.Context, client atproto.ATProtoClient, request mode
 		return nil, fmt.Errorf("posting to feed failed: %w", err)
 	}
 
+	if postResponse == nil {
+		logrus.Error("PostHandler returned nil postResponse with no error")
+		return nil, fmt.Errorf("no response returned from ATProto")
+	}	
+
 	return postResponse, nil
 }
 

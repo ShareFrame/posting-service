@@ -74,5 +74,10 @@ func (s *ATProtoService) PostToFeed(post models.ShareFrameFeedPost, authToken, d
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
+	logrus.WithFields(logrus.Fields{
+		"status": resp.StatusCode,
+		"body":   string(body),
+	}).Info("ATProto response")
+
 	return &postResponse, nil
 }

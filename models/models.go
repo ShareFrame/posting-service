@@ -4,7 +4,7 @@ type ShareFrameFeedPost struct {
 	Text              string                   `json:"text,omitempty"`
 	ImageUris         []string                 `json:"imageUris,omitempty"`
 	VideoUris         []string                 `json:"videoUris,omitempty"`
-	CreatedAt         string                   `json:"createdAt"`
+	CreatedAt         string                   `json:"createdAt,omitempty"`
 	Likes             int                      `json:"likes,omitempty"`
 	Shares            int                      `json:"shares,omitempty"`
 	Comments          int                      `json:"comments,omitempty"`
@@ -31,7 +31,7 @@ type ShareFrameFeedPost struct {
 	VideoMetadata     map[string]interface{}   `json:"videoMetadata,omitempty"`
 	EditHistory       []map[string]interface{} `json:"editHistory,omitempty"`
 	SourceApp         string                   `json:"sourceApp,omitempty"`
-	NSID              string                   `json:"nsid"`
+	NSID              string                   `json:"nsid,omitempty"`
 }
 
 type CreateRecordRequest struct {
